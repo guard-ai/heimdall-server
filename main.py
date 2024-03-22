@@ -1,14 +1,15 @@
 from fastapi import BackgroundTasks, FastAPI, Request
-import numpy as np
-from audio_to_text_stream import AudioToText
-from response_manager import Organizer
 import uvicorn
 import asyncio
 import aiohttp
 import whisper
 
+from audio_to_text_stream import AudioToText
+from response_manager import Organizer
+
 app = FastAPI()
 at = AudioToText()
+organizer = Organizer()
 
 # Constants for Whisper AI
 model = whisper.load_model("base")
@@ -18,8 +19,15 @@ N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
 BYTE_SIZE = (int)(N_SAMPLES/8)
 
 # url = 'https://broadcastify.cdnstream1.com/41983'
-url = 'https://broadcastify.cdnstream1.com/32602'
+URL = 'https://broadcastify.cdnstream1.com/32602' # different one for each worker
+REG = 'Atlanta, GA' # Example, different per worker
+GUARD_SERVER = '' # Integration gonna be fun, idk how
 i = 0
+
+async def post_data(url, data):
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=data) as response:
+            return await response.text()
 
 async def w_audio(raw_bytes):
     global i
@@ -38,23 +46,23 @@ async def w_audio(raw_bytes):
     audio = whisper.pad_or_trim(audio, N_SAMPLES)
 
     # create textfile and text
-    print(audio, audio.shape)
     text = at.decode(audio)
-    print(text)
+    print(f"Text from radio chunk: {text}")
     with open(f'records/record{i}.txt', 'w') as file:
         file.write(text)
 
     # gpt verification
-    
+    data = organizer.re_structure(REG, organizer.aggregate_gpt_call())
+    asyncio.create_task(post_data(GUARD_SERVER, data))
 
-async def fetch_data(url): # main continuous stream
+async def fetch_data(URL): # main continuous stream
     global i
     print(f'Fetching Data {i}')
     chunks = b''
     total_bytes = 0  
     timeout = aiohttp.ClientTimeout(total=None)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as response:
+        async with session.get(URL) as response:
             if response.status == 200:
                 async for chunk in response.content.iter_any():
                     chunks += chunk
@@ -68,7 +76,7 @@ async def fetch_data(url): # main continuous stream
 
 @app.get("/stream")
 async def stream_data():
-    await fetch_data(url)
+    await fetch_data(URL)
 
 def main():
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
