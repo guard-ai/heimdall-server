@@ -28,22 +28,26 @@ def text_to_tuple(res):
     return res
     
 class Organizer(object):
-    def __init__(self):
-        pass
-    
-    def aggregate_gpt_call(self, text):
-        instance = open_AI()
-        if instance.is_incident(text)=="YES":
-            return instance.analyze_incident(text)
-        else:
-            return None
+    def __init__(self, reg , text):
+        self.instance = open_AI(self.reg)
+        self.reg = reg
+        self.text = text
+        self.location = None
+        self.res = None
 
-    def re_structure(self, reg, text):
-        res = self.aggregate_gpt_call(text)
-        r = text_to_tuple(res)
+    def aggregate_gpt_call(self):
+        if self.instance.is_incident(self.text)=="YES":
+            self.res = self.instance.analyze_incident(self.text)
+
+    def re_structure(self):
+        r = text_to_tuple(self.res)
         cur_date = datetime.now().date()
         
-        event_instance = eventStruct(
+        ### CAN ADD LOCATION LOGIC HERE
+        self.location = r[1] #the query
+        self.location = self.instance.for_google(self.reg, self.location) #added a gpt call for you to play around
+
+        self.event_instance = eventStruct(
             Id = uuid.uuid4(),
             Level =r[2],
             Location =r[1],
@@ -52,17 +56,15 @@ class Organizer(object):
             CreatedAt= cur_date,
             )
         
-        log_instance = logStruct(
+        self.log_instance = logStruct(
             Id = uuid.uuid4(),
-            Region = reg,
-            Utterance = text,
+            Region = self.reg,
+            Utterance = self.text,
             CreatedAt = cur_date
             )
         
         data = {
-            "Event": event_instance,
-            "Log": log_instance
+            "Event": self.event_instance,
+            "Log": self.log_instance
             }
-        json_data = json.dumps(data, default=str, indent=4)
-
-        return json_data
+        self.json_data = json.dumps(data, default=str, indent=4)

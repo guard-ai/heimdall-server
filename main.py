@@ -9,7 +9,6 @@ from response_manager import Organizer
 
 app = FastAPI()
 at = AudioToText()
-organizer = Organizer()
 
 # Constants for Whisper AI
 model = whisper.load_model("base")
@@ -21,7 +20,7 @@ BYTE_SIZE = (int)(N_SAMPLES/8)
 # url = 'https://broadcastify.cdnstream1.com/41983'
 URL = 'https://broadcastify.cdnstream1.com/32602' # different one for each worker
 REG = 'Atlanta, GA' # Example, different per worker
-GUARD_SERVER = '' # Integration gonna be fun, idk how
+GUARD_SERVER = '' 
 i = 0
 
 async def post_data(url, data):
@@ -52,8 +51,11 @@ async def w_audio(raw_bytes):
         file.write(text)
 
     # gpt verification
-    data = organizer.re_structure(REG, organizer.aggregate_gpt_call())
-    asyncio.create_task(post_data(GUARD_SERVER, data))
+    organizer = Organizer(REG, text)
+    organizer.aggregate_gpt_call()
+    organizer.re_structure()
+    asyncio.create_task(post_data(GUARD_SERVER, organizer.json_data))
+    return #break
 
 async def fetch_data(URL): # main continuous stream
     global i
