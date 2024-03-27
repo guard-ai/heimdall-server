@@ -2,3 +2,4 @@
 __pycache__
 records/
 test/
+.DS_Store
