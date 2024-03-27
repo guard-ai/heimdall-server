@@ -1,14 +1,11 @@
-from fastapi import BackgroundTasks, FastAPI, Request
-import uvicorn
 import asyncio
 import aiohttp
 import whisper
+from load_dotenv import load_dotenv
 
-from audio_to_text_stream import AudioToText
-from response_manager import Organizer
+from pipeline import Pipeline
 
-app = FastAPI()
-at = AudioToText()
+load_dotenv()
 
 # Constants for Whisper AI
 model = whisper.load_model("base")
@@ -17,19 +14,38 @@ CHUNK_LENGTH = 30
 N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
 BYTE_SIZE = (int)(N_SAMPLES/8)
 
-# url = 'https://broadcastify.cdnstream1.com/41983'
-URL = 'https://broadcastify.cdnstream1.com/32602' # different one for each worker
-REG = 'Atlanta, GA' # Example, different per worker
-GUARD_SERVER = '' 
-i = 0
+# different one for each worker
+STREAM_URL = 'https://broadcastify.cdnstream1.com/32602'
+REGION = 'Atlanta, GA'
+GUARD_SERVER = ''
+
+
+def decode_audio(audio):
+    global model
+    mel = whisper.log_mel_spectrogram(audio).to(model.device)
+
+    _, probs = model.detect_language(mel)
+    # detect the spoken language
+    print(f"detected language: {max(probs, key=probs.get}")
+
+    # decode the audio
+    options = whisper.DecodingOptions()
+    result = whisper.decode(model, mel, options)
+    if type(result) is list:
+        return " ".join([r.text for r in result])
+    elif type(result) is whisper.DecodingResult:
+        return result.text
+
+    return None
+
 
 async def post_data(url, data):
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=data) as response:
             return await response.text()
 
-async def w_audio(raw_bytes):
-    global i
+
+async def process_audio_chunk(raw_bytes, index):
     from pydub import AudioSegment
     import io
 
@@ -38,50 +54,49 @@ async def w_audio(raw_bytes):
         io.BytesIO(raw_bytes), format='raw',
         sample_width=2, frame_rate=SAMPLE_RATE, channels=2
     )
-    i += 1
-    audio_segment.export(f'tests/test{i}.mp3', format='mp3')
-    
-    audio = whisper.load_audio(f'tests/test{i}.mp3')
+
+    audio_segment.export(f'tests/test{index}.mp3', format='mp3')
+
+    audio = whisper.load_audio(f'tests/test{index}.mp3')
     audio = whisper.pad_or_trim(audio, N_SAMPLES)
 
     # create textfile and text
-    text = at.decode(audio)
-    print(f"Text from radio chunk: {text}")
-    with open(f'records/record{i}.txt', 'w') as file:
-        file.write(text)
+    text = decode_audio(audio)
+    with open(f'records/record{index}.txt', 'w') as file:
+        if text:
+            print(f"translated text from streamed chunk: {text}")
+            file.write(text)
 
     # gpt verification
-    organizer = Organizer(REG, text)
-    organizer.aggregate_gpt_call()
-    organizer.re_structure()
-    asyncio.create_task(post_data(GUARD_SERVER, organizer.json_data))
-    return #break
+    pipeline = Pipeline(REGION, text)
+    incident = pipeline.unpack_incident()
+    data = pipeline.pack_json(incident)
+    asyncio.create_task(post_data(GUARD_SERVER, data))
+    return  # break
 
-async def fetch_data(URL): # main continuous stream
-    global i
-    print(f'Fetching Data {i}')
+
+async def fetch_data(stream_url):  # main continuous stream
     chunks = b''
-    total_bytes = 0  
+    total_bytes = 0
     timeout = aiohttp.ClientTimeout(total=None)
+    video_index = 0
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(URL) as response:
+        async with session.get(stream_url) as response:
             if response.status == 200:
                 async for chunk in response.content.iter_any():
                     chunks += chunk
                     total_bytes += len(chunk)
-                    if total_bytes >= BYTE_SIZE:  
-                        asyncio.create_task(w_audio(chunks[:BYTE_SIZE]))
+                    if total_bytes >= BYTE_SIZE:
+                        asyncio.create_task(process_audio_chunk(
+                            chunks[:BYTE_SIZE], video_index))
                         chunks = chunk[BYTE_SIZE:]
                         total_bytes -= BYTE_SIZE
+                        video_index += 1
             else:
-                print('Failed to fetch data:', response.status)
+                print(
+                    f"failed to fetch stream chunk: {response.status}, {response.content}")
 
-@app.get("/stream")
-async def stream_data():
-    await fetch_data(URL)
-
-def main():
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(fetch_data(STREAM_URL))
