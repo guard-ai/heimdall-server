@@ -26,7 +26,7 @@ def decode_audio(audio):
 
     _, probs = model.detect_language(mel)
     # detect the spoken language
-    print(f"detected language: {max(probs, key=probs.get}")
+    print(f"Detected language: {max(probs, key=probs.get)}")
 
     # decode the audio
     options = whisper.DecodingOptions()
