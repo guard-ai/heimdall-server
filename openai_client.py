@@ -37,10 +37,10 @@ class OpenAIClient(object):
         return response['choices'][0]['message']['content'].strip()
 
     # IF LOCATION IS NOT COMPATIBLE, CALL TO TRY AGAIN, ** this prompt needs to be improve, if you are bored....
-    def for_google(self, reg, loc_query, temp=1):
+    def for_google(self, loc_query, temp=1):
         messages = [
             {'role': 'system', 'content': SYST_LOC},
-            {'role': 'user', 'content': LOC + reg + ", " + loc_query}
+            {'role': 'user', 'content': LOC + self.region + ", " + loc_query}
         ]
         response = openai.ChatCompletion.create(
             model=MODEL, messages=messages, temperature=temp, api_key=OPEN_AI_KEY)
