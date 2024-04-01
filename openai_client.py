@@ -25,8 +25,11 @@ class OpenAIClient(object):
 
     def run(self, transcribed_text):
         message = f"""
-        Listen to the following radio communication from {self.region} and
-        record any and all incidents if present: {transcribed_text}
+        Listen to the following radio communication from {self.region}.
+        The radio communication was transcribed and may have typos, code words,
+        or incoherent text. Analyze the text and fill in typos, code words, or
+        incoherent text to the best of your ability and record any and all
+        incidents if present: {transcribed_text}.
         """
         completion = openai.chat.completions.create(
             model="gpt-3.5-turbo-0125",
@@ -113,6 +116,7 @@ class OpenAIClient(object):
                     confirmation=function_args.get("confirmation"),
                     level=function_args.get("level"),
                 )
+
                 events.append(event)
 
         return logs, events

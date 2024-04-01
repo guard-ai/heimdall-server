@@ -1,5 +1,9 @@
-from pipeline import Pipeline
+import uuid
 from dotenv import load_dotenv
+
+import audio
+from pipeline import Pipeline
+
 load_dotenv()
 
 # The following is a transcript from the following
@@ -26,13 +30,19 @@ REGION = "Aurora, Colorado"
 
 
 def test_end_to_end():
-    pipeline = Pipeline(REGION)
-    logs, events = pipeline.parse_incident(TRANSCRIPT)
-    for log in logs:
-        print(f"{log}\n")
-    for event in events:
-        print(f"{event}\n")
-    return
+    index = uuid.uuid4()
+    text = audio.transcribe_audio(
+        "chunks/test_chunks/aurora-colorado-shooting.mp3", index)
+    if text:
+        print(f"transcribed: {text}\n")
+
+        pipeline = Pipeline(REGION)
+        logs, events = pipeline.parse_incident(text)
+
+        for log in logs:
+            print(f"{log}\n")
+        for event in events:
+            print(f"{event}\n")
 
 
 if __name__ == "__main__":

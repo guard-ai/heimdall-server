@@ -2,43 +2,20 @@ import asyncio
 import aiohttp
 import datetime
 from load_dotenv import load_dotenv
+import audio
 import os
-import whisper
 
 from pipeline import Pipeline
 
 load_dotenv()
 
-# Constants for Whisper AI
-model = whisper.load_model("base")
-SAMPLE_RATE = 16000
-CHUNK_LENGTH = 30
-N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
-BYTE_SIZE = (int)(N_SAMPLES/8)
-
-
-def decode_audio(audio):
-    global model
-    mel = whisper.log_mel_spectrogram(audio).to(model.device)
-
-    _, probs = model.detect_language(mel)
-    # detect the spoken language
-    print(f"Detected language: {max(probs, key=probs.get)}")
-
-    # decode the audio
-    options = whisper.DecodingOptions()
-    result = whisper.decode(model, mel, options)
-    if type(result) is list:
-        return " ".join([r.text for r in result])
-    elif type(result) is whisper.DecodingResult:
-        return result.text
-
-    return None
+BYTE_SIZE = (int)(audio.N_SAMPLES/8)
 
 
 async def post_data(url, data):
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data) as response:
+        headers = {"Authorization": f"Bearer {os.getenv('WORKER_AUTH_TOKEN')}"}
+        async with session.post(url, json=data, headers=headers) as response:
             return await response.text()
 
 
@@ -46,34 +23,22 @@ async def process_audio_chunk(raw_bytes):
     from pydub import AudioSegment
     import io
 
-    # unix timestamp
-    index = datetime.datetime.now().timestamp() * 1000
+    index = datetime.datetime.now().timestamp() * 1000  # unix timestamp
 
     # create audio
     audio_segment = AudioSegment.from_file(
         io.BytesIO(raw_bytes), format='raw',
-        sample_width=2, frame_rate=SAMPLE_RATE, channels=2
+        sample_width=2, frame_rate=audio.SAMPLE_RATE, channels=2
     )
 
-    audio_segment.export(f'chunks/chunk_{index}.mp3', format='mp3')
-
-    audio = whisper.load_audio(f'chunks/chunk_{index}.mp3')
-    audio = whisper.pad_or_trim(audio, N_SAMPLES)
-
-    # create textfile and text
-    text = decode_audio(audio)
-    with open(f'records/record_{index}.txt', 'w') as file:
-        if text:
-            print(f"translated text from streamed chunk: {text}")
-            file.write(text)
-
-    # clean up mp3 file that is no longer used
-    os.remove(f'chunks/chunk_{index}.mp3')
-
-    pipeline = Pipeline(os.getenv("REGION"))
-    logs, events = pipeline.parse_incident(text)
-    data = {"logs": logs, "events": events}
-    asyncio.create_task(post_data(os.getenv("GUARD_SERVER"), data))
+    path = f'chunks/chunk_{index}.mp3'
+    audio_segment.export(path, format='mp3')
+    text = audio.transcribe_audio(path, index)
+    if text:
+        pipeline = Pipeline(os.getenv("REGION"))
+        logs, events = pipeline.parse_incident(text)
+        data = {"logs": logs, "events": events}
+        asyncio.create_task(post_data(os.getenv("GUARD_SERVER"), data))
     return
 
 
