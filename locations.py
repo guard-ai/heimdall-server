@@ -18,10 +18,12 @@ class LocationResolver:
     def resolve(self, query: str, region: str) -> List[Location]:
         search_query = f"{query} in {region}"
         request = places.SearchTextRequest(text_query=search_query)
-        response = self.client.search_text(request)
+        fields = "places.displayName,places.formatted_address,places.location"
+        metadata = [("x-goog-fieldmask", fields)]
+        response = self.client.search_text(request, metadata=metadata)
         locations = []
         for place in response.places:
-            location = Location(place.name,
+            location = Location(place.display_name.__str__(),
                                 place.formatted_address,
                                 (place.location.latitude,
                                  place.location.longitude))

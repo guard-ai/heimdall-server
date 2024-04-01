@@ -1,7 +1,9 @@
 import asyncio
 import aiohttp
-import whisper
+import datetime
 from load_dotenv import load_dotenv
+import os
+import whisper
 
 from pipeline import Pipeline
 
@@ -13,11 +15,6 @@ SAMPLE_RATE = 16000
 CHUNK_LENGTH = 30
 N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
 BYTE_SIZE = (int)(N_SAMPLES/8)
-
-# different one for each worker
-STREAM_URL = 'https://broadcastify.cdnstream1.com/32602'
-REGION = 'Atlanta, GA'
-GUARD_SERVER = ''
 
 
 def decode_audio(audio):
@@ -45,9 +42,12 @@ async def post_data(url, data):
             return await response.text()
 
 
-async def process_audio_chunk(raw_bytes, index):
+async def process_audio_chunk(raw_bytes):
     from pydub import AudioSegment
     import io
+
+    # unix timestamp
+    index = datetime.datetime.now().timestamp() * 1000
 
     # create audio
     audio_segment = AudioSegment.from_file(
@@ -55,31 +55,32 @@ async def process_audio_chunk(raw_bytes, index):
         sample_width=2, frame_rate=SAMPLE_RATE, channels=2
     )
 
-    audio_segment.export(f'chunks/chunk{index}.mp3', format='mp3')
+    audio_segment.export(f'chunks/chunk_{index}.mp3', format='mp3')
 
-    audio = whisper.load_audio(f'chunks/chunk{index}.mp3')
+    audio = whisper.load_audio(f'chunks/chunk_{index}.mp3')
     audio = whisper.pad_or_trim(audio, N_SAMPLES)
 
     # create textfile and text
     text = decode_audio(audio)
-    with open(f'records/record{index}.txt', 'w') as file:
+    with open(f'records/record_{index}.txt', 'w') as file:
         if text:
             print(f"translated text from streamed chunk: {text}")
             file.write(text)
 
-    # gpt verification
-    pipeline = Pipeline(REGION, text)
-    incident = pipeline.unpack_incident()
-    data = pipeline.pack_json(incident)
-    asyncio.create_task(post_data(GUARD_SERVER, data))
-    return  # break
+    # clean up mp3 file that is no longer used
+    os.remove(f'chunks/chunk_{index}.mp3')
+
+    pipeline = Pipeline(os.getenv("REGION"))
+    logs, events = pipeline.parse_incident(text)
+    data = {"logs": logs, "events": events}
+    asyncio.create_task(post_data(os.getenv("GUARD_SERVER"), data))
+    return
 
 
 async def fetch_data(stream_url):  # main continuous stream
     chunks = b''
     total_bytes = 0
     timeout = aiohttp.ClientTimeout(total=None)
-    video_index = 0
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(stream_url) as response:
             if response.status == 200:
@@ -88,15 +89,14 @@ async def fetch_data(stream_url):  # main continuous stream
                     total_bytes += len(chunk)
                     if total_bytes >= BYTE_SIZE:
                         asyncio.create_task(process_audio_chunk(
-                            chunks[:BYTE_SIZE], video_index))
+                            chunks[:BYTE_SIZE]))
                         chunks = chunk[BYTE_SIZE:]
                         total_bytes -= BYTE_SIZE
-                        video_index += 1
             else:
-                print(
-                    f"failed to fetch stream chunk: {response.status}, {response.content}")
+                print(f"failed to fetch stream chunk: \
+                        {response.status}, {response.content}")
 
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(fetch_data(STREAM_URL))
+    loop.run_until_complete(fetch_data(os.getenv("STREAM_URL")))
