@@ -55,9 +55,9 @@ async def process_audio_chunk(raw_bytes, index):
         sample_width=2, frame_rate=SAMPLE_RATE, channels=2
     )
 
-    audio_segment.export(f'tests/test{index}.mp3', format='mp3')
+    audio_segment.export(f'chunks/chunk{index}.mp3', format='mp3')
 
-    audio = whisper.load_audio(f'tests/test{index}.mp3')
+    audio = whisper.load_audio(f'chunks/chunk{index}.mp3')
     audio = whisper.pad_or_trim(audio, N_SAMPLES)
 
     # create textfile and text
