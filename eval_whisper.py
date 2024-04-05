@@ -23,7 +23,10 @@ async def process_audio_chunk(raw_bytes):
     text = audio.transcribe_audio(path, index)
 
     with open(f"whisper_eval/text/text_{index}.txt", "w") as f:
-        f.write(text)
+        if text:
+            f.write(text)
+        else:
+            f.write("text: None")
 
 async def fetch_data(stream_url, num):
     print(f"Starting with url number: {num}:")
