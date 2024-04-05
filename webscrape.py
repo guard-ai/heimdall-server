@@ -14,10 +14,11 @@ if response.status_code == 200:
         for link in links:
             href = link.get("href")
             if href and href.startswith("/listen/feed"):
+                href = href.split("/")
                 # remove duplicates
-                TOP.add(href)
+                TOP.add(href[-1])
 
         for link in TOP:
-            f.write("https://www.broadcastify.com"+link + "\n")
+            f.write("https://broadcastify.cdnstream1.com/"+link + "\n")
 else:
     print("Failed to fetch HTML page. Status code:", response.status_code)
