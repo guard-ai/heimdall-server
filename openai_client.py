@@ -1,20 +1,20 @@
-import datetime
+import json
 import os
 import uuid
+
 import openai
-import json
 
 from models import Event, Log
 
 
-def record_incident(log_id, location, category, confirmation, level):
+def record_incident(log_id, location, category, confirmation, level, description):
     return Event(
         id=uuid.uuid4(),
-        level=level,
-        location=location,
-        category=f"{confirmation.strip()}: {category.strip()}",
+        level=f"{confirmation.strip().upper()}_{level.strip().upper()}",
+        location=location.strip(),
+        category=f"{category.strip()}",
         log_id=log_id,
-        created_at=datetime.datetime.now().date(),
+        description=description,
     )
 
 
@@ -34,56 +34,66 @@ class OpenAIClient(object):
         completion = openai.chat.completions.create(
             model="gpt-3.5-turbo-0125",
             messages=[{"role": "user", "content": message}],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "record_incident",
-                    "description": "Record an incident from a chunk of text \
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "record_incident",
+                        "description": "Record an incident from a chunk of text \
                             transcribed from first responder radio",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "location": {
-                                "type": "string",
-                                "description": "a search query to provide \
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "a search query to provide \
                                         Google maps that identifies the \
-                                        location of the incident"
-                            },
-                            "category": {
-                                "type": "string",
-                                "description": "category of incident:\
+                                        location of the incident",
+                                },
+                                "category": {
+                                    "type": "string",
+                                    "description": "category of incident:\
                                         name or nature of the crime such as, \
                                         fire, traffic accident, medical, \
-                                        hazards, robbery, etc."
-                            },
-                            "confirmation": {
-                                "type": "string",
-                                "description": "'Confirmed' if the incident \
+                                        hazards, robbery, etc.",
+                                },
+                                "confirmation": {
+                                    "type": "string",
+                                    "description": "'CONFIRMED' if the incident \
                                         has been confirmed by civilians, \
-                                        units or the dispatcher. 'Reported' \
+                                        units or the dispatcher. 'REPORTED' \
                                         if an incident is suspected but \
                                         requires further investigation by \
-                                        authorities"
-                            },
-                            "level": {
-                                "type": "string",
-                                "description": "'HIGH' if the incident poses \
-                                        an immediate risk on human life and \
-                                        civilians should seek immediate \
-                                        shelter. 'MEDIUM' if the incident \
+                                        authorities",
+                                },
+                                "level": {
+                                    "type": "string",
+                                    "description": "'THREAT' if the incident \
+                                        poses an immediate risk on human life \
+                                        and civilians should seek immediate \
+                                        shelter. 'INFO' if the incident \
                                         poses some immediate risk to \
-                                        civilians, and they should be aware. \
-                                        'LOW' if the incident does not pose \
-                                        an immediate risk to civilians but \
-                                        they should be aware."
+                                        civilians, and they should be aware.",
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "description": "Provide a short \
+                                    description of the event that only \
+                                    includes the relevant features needed \
+                                    to inform the user.",
+                                },
                             },
+                            "required": [
+                                "location",
+                                "category",
+                                "confirmation",
+                                "level",
+                            ],
                         },
-                        "required": ["location", "category", "confirmation",
-                                     "level"]
-                    }
+                    },
                 }
-            }],
-            tool_choice="auto"
+            ],
+            tool_choice="auto",
         )
         response = completion.choices[0].message
         tool_calls = response.tool_calls
@@ -100,7 +110,6 @@ class OpenAIClient(object):
                 id=uuid.uuid4(),
                 region=self.region,
                 utterance=transcribed_text,
-                created_at=datetime.datetime.now().date()
             )
 
             logs.append(log)
@@ -115,6 +124,7 @@ class OpenAIClient(object):
                     category=function_args.get("category"),
                     confirmation=function_args.get("confirmation"),
                     level=function_args.get("level"),
+                    description=function_args.get("description"),
                 )
 
                 events.append(event)
