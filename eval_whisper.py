@@ -18,11 +18,11 @@ async def process_audio_chunk(raw_bytes):
         sample_width=2, frame_rate=audio.SAMPLE_RATE, channels=2
     )
 
-    path = f'whisper_eval/chunk_{index}.mp3'
+    path = f'whisper_eval2/chunk_{index}.mp3'
     audio_segment.export(path, format='mp3')
     text = audio.transcribe_audio(path, index)
 
-    with open(f"whisper_eval/text/text_{index}.txt", "w") as f:
+    with open(f"whisper_eval2/text/text_{index}.txt", "w") as f:
         if text:
             f.write(text)
         else:

@@ -43,10 +43,11 @@ async def process_audio_chunk(raw_bytes):
     audio_segment.export(path, format="mp3")
     text = audio.transcribe_audio(path, index)
     if text:
-        pipeline = Pipeline(os.getenv("REGION"))
-        logs, events = pipeline.parse_incident(text)
-        data = {"logs": logs, "events": events}
-        asyncio.create_task(post_data(data))
+        if len(text) > 35:
+            pipeline = Pipeline(os.getenv("REGION"))
+            logs, events = pipeline.parse_incident(text)
+            data = {"logs": logs, "events": events}
+            asyncio.create_task(post_data(data))
     return
 
 
