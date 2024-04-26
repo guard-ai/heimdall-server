@@ -79,13 +79,11 @@ if __name__ == "__main__":
         print("running DEV test...")
 
         index = uuid.uuid4()
-        text = audio.transcribe_audio(
-            "chunks/test_chunks/aurora-colorado-shooting.mp3", index
-        )
+        text = audio.transcribe_audio("chunks/test_chunks/emory-protests.mp3", index)
         if text:
             print(f"transcribed: {text}\n")
 
-            REGION = "Aurora, Colorado"
+            REGION = "Atlanta, Georgia"
             pipeline = Pipeline(REGION)
             logs, events = pipeline.parse_incident(text)
             data = {
