@@ -79,7 +79,8 @@ if __name__ == "__main__":
         print("running DEV test...")
 
         index = uuid.uuid4()
-        text = audio.transcribe_audio("chunks/test_chunks/emory-protests.mp3", index)
+        video = os.getenv("VIDEO", "chinks/test_chunks/emory-protests.mp3")
+        text = audio.transcribe_audio(video, index)
         if text:
             print(f"transcribed: {text}\n")
 

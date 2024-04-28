@@ -1,5 +1,5 @@
-from openai_client import OpenAIClient
 from locations import LocationResolver
+from openai_client import OpenAIClient
 
 
 class Pipeline(object):
@@ -20,6 +20,12 @@ class Pipeline(object):
                 event.location = f"{lat},{lon}"
             else:
                 locations = self.location.resolve(event.location, self.region)
+                if len(locations) == 0:
+                    print(
+                        f"Event search query: {event.location} \
+                        at {self.region} produced no locations"
+                    )
+                    return [], []
                 lat = locations[0].coords[0]
                 lon = locations[0].coords[1]
                 event.location = f"{lat},{lon}"
